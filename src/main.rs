@@ -55,6 +55,7 @@ fn main() -> std::io::Result<()> {
         (version: "1.0")
         (author: "David N. <dabsunter@gmail.com>")
         (about: "Run your favorite brainfuck programs !")
+        (@arg MEM: -m --memory +takes_value "Sets the size of brainfuck array")
         (@arg CMD: -c --command "Directly run the program passed as string")
         (@arg INPUT: +required "Sets the input program to run (file by default)")
     ).get_matches();
@@ -68,16 +69,13 @@ fn main() -> std::io::Result<()> {
 
     let commands = parse(program.chars().by_ref());
 
-    let mut memory = [0; 30000];
+    let mut memory = vec![0; match matches.value_of("MEM") {
+        Some(m) => m.parse().unwrap(),
+        None => 30000
+    }];
     let mut pointer: usize = 0;
 
     run(&commands, &mut memory, &mut pointer);
 
-    /*println!("");
-    print!("[{}", memory[0]);
-    for i in 1..30000 {
-        print!(", {}", memory[i])
-    }
-    println!("]")*/
     Ok(())
 }
