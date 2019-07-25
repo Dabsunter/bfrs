@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::str::Chars;
 use console::Term;
+use std::time::SystemTime;
 
 #[macro_use]
 extern crate clap;
@@ -36,6 +37,24 @@ fn parse(program: &mut Chars) -> Vec<Command> {
     commands
 }
 
+fn transpile_to_c(program: &mut Chars, out: &mut File) -> std::io::Result<()> {
+    loop {
+        match program.next() {
+            Some('>') => out.write(b"++ptr;")?,
+            Some('<') => out.write(b"--ptr;")?,
+            Some('+') => out.write(b"++*ptr;")?,
+            Some('-') => out.write(b"--*ptr;")?,
+            Some('.') => out.write(b"putchar(*ptr);")?,
+            Some(',') => out.write(b"*ptr=getchar();")?,
+            Some('[') => out.write(b"while(*ptr){")?,
+            Some(']') => out.write(b"}")?,
+            None => break,
+            _ => continue
+        };
+    }
+    Ok(())
+}
+
 fn run(commands: &[Command], memory: &mut [u32], pointer: &mut usize) {
     for c in commands {
         match c {
@@ -56,6 +75,8 @@ fn main() -> std::io::Result<()> {
         (author: "David N. <dabsunter@gmail.com>")
         (about: "Run your favorite brainfuck programs !")
         (@arg MEM: -m --memory +takes_value "Sets the size of brainfuck array")
+        (@arg TR2C: -tr2c --transpileToC +takes_value "Transpile to C and sets out file")
+        (@arg DEBUG: -d --debug "Dump some values")
         (@arg CMD: -c --command "Directly run the program passed as string")
         (@arg INPUT: +required "Sets the input program to run (file by default)")
     ).get_matches();
@@ -67,15 +88,30 @@ fn main() -> std::io::Result<()> {
         bf_file.read_to_string(&mut program)?;
     }
 
-    let commands = parse(program.chars().by_ref());
+    let sys_time = SystemTime::now();
 
-    let mut memory = vec![0; match matches.value_of("MEM") {
-        Some(m) => m.parse().unwrap(),
-        None => 30000
-    }];
-    let mut pointer: usize = 0;
+    if matches.occurrences_of("TR2C") == 0 {
+        let commands = parse(program.chars().by_ref());
 
-    run(&commands, &mut memory, &mut pointer);
+        let mut memory = vec![0; match matches.value_of("MEM") {
+            Some(m) => m.parse().unwrap(),
+            None => 30000
+        }];
+        let mut pointer: usize = 0;
+
+        run(&commands, &mut memory, &mut pointer);
+    } else {
+        let mut out = File::create(matches.value_of("TR2C").unwrap())?;
+        out.write(b"#include <stdio.h>\n int main(){char array[INFINITELY_LARGE_SIZE]={0};char *ptr=array;")?;
+        transpile_to_c(program.chars().by_ref(), &mut out)?;
+        out.write(b"}")?;
+    }
+
+    if matches.occurrences_of("DEBUG") != 0 {
+        println!();
+        let difference = sys_time.elapsed().unwrap();
+        println!("Elapsed time: {:?}", difference);
+    }
 
     Ok(())
 }
