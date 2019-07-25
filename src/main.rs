@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::io::prelude::*;
+use std::io::Read;
 use std::str::Chars;
-use console::Term;
 use std::time::SystemTime;
 
 #[macro_use]
@@ -40,13 +40,13 @@ fn parse(program: &mut Chars) -> Vec<Command> {
 fn transpile_to_c(program: &mut Chars, out: &mut File) -> std::io::Result<()> {
     loop {
         match program.next() {
-            Some('>') => out.write(b"++ptr;")?,
-            Some('<') => out.write(b"--ptr;")?,
-            Some('+') => out.write(b"++*ptr;")?,
-            Some('-') => out.write(b"--*ptr;")?,
-            Some('.') => out.write(b"putchar(*ptr);")?,
-            Some(',') => out.write(b"*ptr=getchar();")?,
-            Some('[') => out.write(b"while(*ptr){")?,
+            Some('>') => out.write(b"++p;")?,
+            Some('<') => out.write(b"--p;")?,
+            Some('+') => out.write(b"++*p;")?,
+            Some('-') => out.write(b"--*p;")?,
+            Some('.') => out.write(b"putchar(*p);")?,
+            Some(',') => out.write(b"*p=getchar();")?,
+            Some('[') => out.write(b"while(*p){")?,
             Some(']') => out.write(b"}")?,
             None => break,
             _ => continue
@@ -63,8 +63,16 @@ fn run(commands: &[Command], memory: &mut [u32], pointer: &mut usize) {
             Command::Add => memory[*pointer] += 1,
             Command::Substract => memory[*pointer] -= 1,
             Command::Out => print!("{}", memory[*pointer] as u8 as char),
-            Command::In => memory[*pointer] = Term::stdout().read_char().unwrap_or_default() as u32,
-            Command::While(w) => while memory[*pointer] != 0 { run(w, memory, pointer) }
+            Command::In
+            => memory[*pointer] = std::io::stdin()
+                .bytes()
+                .next()
+                .expect("Invalid input")
+                .unwrap() as u32,
+            Command::While(w)
+            => while memory[*pointer] != 0 {
+                run(w, memory, pointer)
+            }
         }
     }
 }
@@ -102,7 +110,8 @@ fn main() -> std::io::Result<()> {
         run(&commands, &mut memory, &mut pointer);
     } else {
         let mut out = File::create(matches.value_of("TR2C").unwrap())?;
-        out.write(b"#include <stdio.h>\n int main(){char array[INFINITELY_LARGE_SIZE]={0};char *ptr=array;")?;
+        out.write(format!("#include <stdio.h>\n int main(){{char a[{}]={{0}};char *p=a;",
+                          matches.value_of("MEM").unwrap_or("30000")).as_bytes())?;
         transpile_to_c(program.chars().by_ref(), &mut out)?;
         out.write(b"}")?;
     }
